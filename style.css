@@ -13,7 +13,7 @@ body {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    overflow-x: hidden;
+    overflow: hidden;
     padding: 10px;
 }
 
@@ -27,10 +27,9 @@ body {
     text-align: center;
 }
 
-/* Coque du Nokia N95 - Version Responsive améliorée */
+/* Coque du Nokia N95 - Taille de référence fixe pour le design */
 .nokia-phone {
-    width: 100%;
-    max-width: 760px;
+    width: 760px;
     height: 360px;
     background: linear-gradient(135deg, #222 0%, #111 50%, #000 100%);
     border-radius: 18px;
@@ -41,6 +40,7 @@ body {
     padding: 12px;
     border: 3px solid #333;
     position: relative;
+    flex-shrink: 0;
 }
 
 /* Boutons multimédias de gauche (Rétroéclairés bleu) */
@@ -208,38 +208,19 @@ video {
     color: #000;
 }
 
-/* Adaptation automatique selon la largeur de l'écran du smartphone */
-@media screen and (max-width: 768px) {
+/* Ajustement responsive fluide en mode Portrait ou Paysage mobile */
+@media screen and (max-width: 800px) {
     body {
-        padding: 5px;
+        overflow: auto; /* Permet un défilement propre si besoin */
     }
     .nokia-phone {
-        /* S'ajuste dynamiquement à la largeur de l'écran sans dépasser */
-        width: 100vw;
-        max-width: 100%;
-        height: auto;
-        aspect-ratio: 16 / 9;
-        padding: 8px;
-        transform: none; /* Supprime le zoom fixe pour laisser le width 100% gérer l'espace */
+        /* Réduit proportionnellement le téléphone selon la largeur de l'écran du mobile */
+        zoom: 0.52; 
     }
-    .nokia-screen-container {
-        height: auto;
-        flex: 1;
-    }
-    .right-nokia-pad {
-        width: 85px;
-        height: auto;
-        gap: 4px;
-        padding: 4px 0;
-    }
-    .nokia-btn {
-        width: 32px;
-        height: 32px;
-        font-size: 13px;
-    }
-    .nav-key {
-        width: 28px;
-        height: 20px;
-        font-size: 9px;
+}
+
+@media screen and (max-width: 500px) {
+    .nokia-phone {
+        zoom: 0.44; /* Écrans de smartphones étroits en mode portrait */
     }
 }
