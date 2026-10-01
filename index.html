@@ -15,10 +15,10 @@
     <div class="nokia-phone">
         <!-- Touches multimédias lumineuses bleues à gauche -->
         <div class="left-media-keys">
-            <button class="nokia-btn" id="btn-prev" title="Précédent">⏮</button>
+            <button class="nokia-btn" id="btn-prev" title="Précédent" onclick="playPrevious()">⏮</button>
             <button class="nokia-btn" id="btn-play" title="Lecture / Pause">⏯</button>
             <button class="nokia-btn" id="btn-stop" title="Arrêt">⏹</button>
-            <button class="nokia-btn" id="btn-next" title="Suivant">⏭</button>
+            <button class="nokia-btn" id="btn-next" title="Suivant" onclick="playNext()">⏭</button>
         </div>
 
         <!-- Écran principal -->
@@ -35,9 +35,9 @@
                         <span style="font-size:24px;">📀</span>
                         <span>VLC Player</span>
                     </div>
-                    <div class="menu-icon" onclick="alert('Galerie Vidéo')">
+                    <div class="menu-icon" onclick="openMediaList()">
                         <span style="font-size:24px;">🎬</span>
-                        <span>Vidéos</span>
+                        <span>Vidéos / Music</span>
                     </div>
                     <div class="menu-icon" onclick="alert('Paramètres du thème')">
                         <span style="font-size:24px;">⚙️</span>
@@ -45,13 +45,26 @@
                     </div>
                 </div>
 
+                <!-- Vue Liste des Médias (Bibliothèque) -->
+                <div id="media-list-view" style="display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; background: #0b0f19; flex-direction: column; color: #fff; padding: 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; border-bottom: 1px solid #00f0ff33; padding-bottom: 3px;">
+                        <span style="font-size: 10px; color: #00f0ff;">Mes Fichiers</span>
+                        <label style="background: #00f0ff; color: #000; font-size: 9px; padding: 2px 6px; border-radius: 3px; cursor: pointer;">
+                            + Ajouter <input type="file" id="multi-file-picker" accept="video/*,audio/*" multiple style="display:none;" onchange="addFiles(event)">
+                        </label>
+                    </div>
+                    <div id="playlist-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px;">
+                        <div style="font-size: 9px; color: #777; text-align: center; margin-top: 20px;">Aucun média. Clique sur "+ Ajouter" pour importer tes vidéos/musiques !</div>
+                    </div>
+                </div>
+
                 <!-- Vue du Lecteur Vidéo type VLC -->
                 <div id="player-view">
-                    <video id="video-element" controls></video>
-                    <div style="background:#111; padding:5px; display:flex; justify-content:space-between; align-items:center;">
-                        <span style="color:#00f0ff; font-size:11px;" id="now-playing">Aucun fichier</span>
+                    <video id="video-element" controls onended="playNext()"></video>
+                    <div style="background:#111; padding:4px; display:flex; justify-content:space-between; align-items:center;">
+                        <span style="color:#00f0ff; font-size:10px;" id="now-playing">Aucun fichier</span>
                         <div class="file-input-wrapper">
-                            <input type="file" id="file-picker" accept="video/*" onchange="loadVideo(event)">
+                            <input type="file" id="file-picker" accept="video/*,audio/*" onchange="loadSingleFile(event)" style="font-size: 8px;">
                         </div>
                     </div>
                 </div>
@@ -68,7 +81,7 @@
                 <div class="nav-key">▶</div>
             </div>
             <div class="nav-key">▼</div>
-            <div class="nav-key" style="border-color: #ff3333; color: #ff3333; box-shadow: 0 0 8px rgba(255, 51, 51, 0.4);">📞</div>
+            <div class="nav-key" style="border-color: #ff3333; color: #ff3333; box-shadow: 0 0 8px rgba(255, 51, 51, 0.4);" onclick="goHome()">📞</div>
         </div>
     </div>
 
@@ -76,33 +89,100 @@
         const videoElement = document.getElementById('video-element');
         const playerView = document.getElementById('player-view');
         const homeMenu = document.getElementById('home-menu');
+        const mediaListView = document.getElementById('media-list-view');
         const screenTitle = document.getElementById('screen-title');
         const nowPlaying = document.getElementById('now-playing');
+        const playlistContainer = document.getElementById('playlist-container');
+
+        let playlist = [];
+        let currentIndex = -1;
 
         function openPlayer() {
             homeMenu.style.display = 'none';
+            mediaListView.style.display = 'none';
             playerView.style.display = 'flex';
             screenTitle.innerText = "VLC Media Player";
+        }
+
+        function openMediaList() {
+            homeMenu.style.display = 'none';
+            playerView.style.display = 'none';
+            mediaListView.style.display = 'flex';
+            screenTitle.innerText = "Nokia - Bibliothèque";
+            renderPlaylist();
         }
 
         function goHome() {
             videoElement.pause();
             playerView.style.display = 'none';
+            mediaListView.style.display = 'none';
             homeMenu.style.display = 'grid';
             screenTitle.innerText = "Nokia N95 - Menu";
         }
 
-        function loadVideo(event) {
-            const file = event.target.files[0];
-            if (file) {
-                const fileURL = URL.createObjectURL(file);
-                videoElement.src = fileURL;
-                videoElement.play();
-                nowPlaying.innerText = file.name;
+        function addFiles(event) {
+            const files = event.target.files;
+            for (let file of files) {
+                playlist.push({
+                    name: file.name,
+                    url: URL.createObjectURL(file)
+                });
+            }
+            renderPlaylist();
+            if (playlist.length === files.length) {
+                playMedia(0); // Lance le premier fichier importé automatiquement
             }
         }
 
-        // Liaison des boutons lumineux bleus avec les actions du lecteur
+        function loadSingleFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const newItem = { name: file.name, url: URL.createObjectURL(file) };
+                playlist.push(newItem);
+                playMedia(playlist.length - 1);
+            }
+        }
+
+        function renderPlaylist() {
+            if (playlist.length === 0) {
+                playlistContainer.innerHTML = `<div style="font-size: 9px; color: #777; text-align: center; margin-top: 20px;">Aucun média. Clique sur "+ Ajouter" !</div>`;
+                return;
+            }
+            playlistContainer.innerHTML = '';
+            playlist.forEach((item, index) => {
+                let div = document.createElement('div');
+                div.style.cssText = `padding: 5px; background: ${index === currentIndex ? 'rgba(0, 240, 255, 0.2)' : 'rgba(255,255,255,0.05)'}; border: 1px solid ${index === currentIndex ? '#00f0ff' : 'rgba(0, 240, 255, 0.2)'}; border-radius: 4px; font-size: 9px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; color: #fff;`;
+                div.innerHTML = `<span>🎬 ${item.name}</span>`;
+                div.onclick = () => playMedia(index);
+                playlistContainer.appendChild(div);
+            });
+        }
+
+        function playMedia(index) {
+            if (playlist.length > 0 && index >= 0 && index < playlist.length) {
+                currentIndex = index;
+                openPlayer();
+                videoElement.src = playlist[currentIndex].url;
+                videoElement.play();
+                nowPlaying.innerText = playlist[currentIndex].name;
+            }
+        }
+
+        function playNext() {
+            if (playlist.length > 0) {
+                let nextIndex = (currentIndex + 1) % playlist.length;
+                playMedia(nextIndex);
+            }
+        }
+
+        function playPrevious() {
+            if (playlist.length > 0) {
+                let prevIndex = (currentIndex - 1 + playlist.length) % playlist.length;
+                playMedia(prevIndex);
+            }
+        }
+
+        // Liaison des boutons multimédias physiques de gauche
         document.getElementById('btn-play').addEventListener('click', () => {
             if (playerView.style.display === 'flex') {
                 if (videoElement.paused) {
@@ -110,8 +190,10 @@
                 } else {
                     videoElement.pause();
                 }
+            } else if (playlist.length > 0) {
+                playMedia(currentIndex >= 0 ? currentIndex : 0);
             } else {
-                openPlayer();
+                openMediaList();
             }
         });
 
@@ -125,13 +207,7 @@
         // Enregistrement du Service Worker pour la PWA
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then((reg) => {
-                        console.log('Service Worker enregistré avec succès !', reg.scope);
-                    })
-                    .catch((err) => {
-                        console.log('Erreur d\'enregistrement du Service Worker:', err);
-                    });
+                navigator.serviceWorker.register('./sw.js').catch((err) => console.log('SW error:', err));
             });
         }
     </script>
