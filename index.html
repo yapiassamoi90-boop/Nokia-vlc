@@ -46,23 +46,27 @@
                 </div>
 
                 <!-- Vue Liste des Médias (Bibliothèque) -->
-                <div id="media-list-view" style="display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; background: #0b0f19; flex-direction: column; color: #fff; padding: 6px;">
+                <div id="media-list-view" style="display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; background: #0b0f19; flex-direction: column; color: #fff; padding: 6px; z-index: 5;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; border-bottom: 1px solid #00f0ff33; padding-bottom: 3px;">
-                        <span style="font-size: 10px; color: #00f0ff;">Mes Fichiers</span>
+                        <span style="font-size: 10px; color: #00f0ff;">Bibliothèque</span>
                         <label style="background: #00f0ff; color: #000; font-size: 9px; padding: 2px 6px; border-radius: 3px; cursor: pointer;">
-                            + Ajouter <input type="file" id="multi-file-picker" accept="video/*,audio/*" multiple style="display:none;" onchange="addFiles(event)">
+                            📁 Sélection Groupe <input type="file" id="multi-file-picker" accept="video/*,audio/*" multiple style="display:none;" onchange="addFiles(event)">
                         </label>
                     </div>
                     <div id="playlist-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px;">
-                        <div style="font-size: 9px; color: #777; text-align: center; margin-top: 20px;">Aucun média. Clique sur "+ Ajouter" pour importer tes vidéos/musiques !</div>
+                        <div style="font-size: 9px; color: #777; text-align: center; margin-top: 20px;">Clique sur "Sélection Groupe" pour importer plusieurs musiques ou vidéos !</div>
                     </div>
                 </div>
 
-                <!-- Vue du Lecteur Vidéo type VLC -->
-                <div id="player-view">
-                    <video id="video-element" controls onended="playNext()"></video>
+                <!-- Vue du Lecteur Multimédia & Égaliseur -->
+                <div id="player-view" style="display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; background: #000; flex-direction: column; z-index: 10;">
+                    <div style="position: relative; flex: 1; display: flex; justify-content: center; align-items: center; background: #000;">
+                        <video id="video-element" controls autoplay onended="playNext()" style="width: 100%; height: 100%; object-fit: contain;"></video>
+                        <!-- Canvas de l'égaliseur visuel par-dessus ou pour les audios -->
+                        <canvas id="equalizer-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none;"></canvas>
+                    </div>
                     <div style="background:#111; padding:4px; display:flex; justify-content:space-between; align-items:center;">
-                        <span style="color:#00f0ff; font-size:10px;" id="now-playing">Aucun fichier</span>
+                        <span style="color:#00f0ff; font-size:10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%;" id="now-playing">Aucun fichier</span>
                         <div class="file-input-wrapper">
                             <input type="file" id="file-picker" accept="video/*,audio/*" onchange="loadSingleFile(event)" style="font-size: 8px;">
                         </div>
@@ -93,9 +97,62 @@
         const screenTitle = document.getElementById('screen-title');
         const nowPlaying = document.getElementById('now-playing');
         const playlistContainer = document.getElementById('playlist-container');
+        const canvas = document.getElementById('equalizer-canvas');
+        const ctx = canvas.getContext('2d');
 
         let playlist = [];
         let currentIndex = -1;
+        let audioCtx, analyser, sourceNode, isInitialized = false;
+
+        function initAudioContext() {
+            if (isInitialized) return;
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+                analyser = audioCtx.createAnalyser();
+                sourceNode = audioCtx.createMediaElementSource(videoElement);
+                sourceNode.connect(analyser);
+                analyser.connect(audioCtx.destination);
+                analyser.fftSize = 64;
+                isInitialized = true;
+                drawEqualizer();
+            } catch (e) {
+                console.log("AudioContext error:", e);
+            }
+        }
+
+        function drawEqualizer() {
+            requestAnimationFrame(drawEqualizer);
+            if (!analyser || playerView.style.display !== 'flex') return;
+
+            // N'affiche le canvas graphique que si c'est un fichier audio (ou par choix visuel)
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            let barWidth = (canvas.width / bufferLength) * 2.5;
+            let barHeight;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = (dataArray[i] / 255) * canvas.height;
+
+                // Couleur néon cyan style Nokia
+                let gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+                gradient.addColorStop(0, '#0055ff');
+                gradient.addColorStop(1, '#00f0ff');
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+
+                x += barWidth + 2;
+            }
+        }
 
         function openPlayer() {
             homeMenu.style.display = 'none';
@@ -125,19 +182,20 @@
             for (let file of files) {
                 playlist.push({
                     name: file.name,
-                    url: URL.createObjectURL(file)
+                    url: URL.createObjectURL(file),
+                    type: file.type
                 });
             }
             renderPlaylist();
-            if (playlist.length === files.length) {
-                playMedia(0); // Lance le premier fichier importé automatiquement
+            if (currentIndex === -1 && playlist.length > 0) {
+                playMedia(0);
             }
         }
 
         function loadSingleFile(event) {
             const file = event.target.files[0];
             if (file) {
-                const newItem = { name: file.name, url: URL.createObjectURL(file) };
+                const newItem = { name: file.name, url: URL.createObjectURL(file), type: file.type };
                 playlist.push(newItem);
                 playMedia(playlist.length - 1);
             }
@@ -145,14 +203,15 @@
 
         function renderPlaylist() {
             if (playlist.length === 0) {
-                playlistContainer.innerHTML = `<div style="font-size: 9px; color: #777; text-align: center; margin-top: 20px;">Aucun média. Clique sur "+ Ajouter" !</div>`;
+                playlistContainer.innerHTML = `<div style="font-size: 9px; color: #777; text-align: center; margin-top: 20px;">Aucun média. Clique sur "Sélection Groupe" !</div>`;
                 return;
             }
             playlistContainer.innerHTML = '';
             playlist.forEach((item, index) => {
                 let div = document.createElement('div');
                 div.style.cssText = `padding: 5px; background: ${index === currentIndex ? 'rgba(0, 240, 255, 0.2)' : 'rgba(255,255,255,0.05)'}; border: 1px solid ${index === currentIndex ? '#00f0ff' : 'rgba(0, 240, 255, 0.2)'}; border-radius: 4px; font-size: 9px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; color: #fff;`;
-                div.innerHTML = `<span>🎬 ${item.name}</span>`;
+                let icon = item.type.includes('audio') ? '🎵' : '🎬';
+                div.innerHTML = `<span>${icon} ${item.name}</span>`;
                 div.onclick = () => playMedia(index);
                 playlistContainer.appendChild(div);
             });
@@ -162,9 +221,24 @@
             if (playlist.length > 0 && index >= 0 && index < playlist.length) {
                 currentIndex = index;
                 openPlayer();
+                
+                if (!isInitialized) {
+                    initAudioContext();
+                }
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
                 videoElement.src = playlist[currentIndex].url;
                 videoElement.play();
                 nowPlaying.innerText = playlist[currentIndex].name;
+
+                // Afficher l'égaliseur visuel si c'est un fichier audio
+                if (playlist[currentIndex].type.includes('audio')) {
+                    canvas.style.display = 'block';
+                } else {
+                    canvas.style.display = 'none'; // Laisse la vidéo s'afficher normalement
+                }
             }
         }
 
@@ -182,7 +256,7 @@
             }
         }
 
-        // Liaison des boutons multimédias physiques de gauche
+        // Touches multimédias de gauche
         document.getElementById('btn-play').addEventListener('click', () => {
             if (playerView.style.display === 'flex') {
                 if (videoElement.paused) {
@@ -204,7 +278,7 @@
             }
         });
 
-        // Enregistrement du Service Worker pour la PWA
+        // Service Worker PWA
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js').catch((err) => console.log('SW error:', err));
