@@ -45,7 +45,7 @@
                     </div>
                 </div>
 
-                <!-- Vue Liste des Médias (Bibliothèque avec Sélection de Groupe) -->
+                <!-- Vue Liste des Médias (Bibliothèque) -->
                 <div id="media-list-view" style="display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; background: #0b0f19; flex-direction: column; color: #fff; padding: 6px; z-index: 5;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; border-bottom: 1px solid #00f0ff33; padding-bottom: 3px;">
                         <span style="font-size: 10px; color: #00f0ff;">Bibliothèque</span>
@@ -54,7 +54,7 @@
                         </label>
                     </div>
                     <div id="playlist-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px;">
-                        <div style="font-size: 9px; color: #777; text-align: center; margin-top: 20px;">Clique sur "Sélection Groupe" pour importer toute ta playlist d'un coup !</div>
+                        <div style="font-size: 9px; color: #777; text-align: center; margin-top: 20px;">Coche plusieurs fichiers dans ton explorateur pour une sélection groupée !</div>
                     </div>
                 </div>
 
@@ -62,20 +62,20 @@
                 <div id="player-view" style="display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; background: #000; flex-direction: column; z-index: 10;">
                     <div style="position: relative; flex: 1; display: flex; justify-content: center; align-items: center; background: #000;">
                         <video id="video-element" controls autoplay onended="playNext()" style="width: 100%; height: 100%; object-fit: contain;"></video>
-                        <!-- Canvas pour l'égaliseur audio -->
                         <canvas id="equalizer-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none;"></canvas>
                     </div>
                     <div style="background:#111; padding:4px; display:flex; justify-content:space-between; align-items:center;">
                         <span style="color:#00f0ff; font-size:10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%;" id="now-playing">Aucun fichier</span>
-                        <div class="file-input-wrapper">
-                            <input type="file" id="file-picker" accept="video/*,audio/*" onchange="loadSingleFile(event)" style="font-size: 8px;">
+                        <div style="display: flex; gap: 4px;">
+                            <button onclick="togglePiP()" style="background: #00f0ff; border: none; color: #000; font-size: 8px; padding: 2px 4px; border-radius: 2px; cursor: pointer;" title="Mode Flottant (PiP)">🗗 PiP</button>
+                            <input type="file" id="file-picker" accept="video/*,audio/*" onchange="loadSingleFile(event)" style="font-size: 8px; width: 60px;">
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Pavé directionnel droit interactif -->
+        <!-- Pavé directionnel droit -->
         <div class="right-nokia-pad">
             <div class="nav-key" onclick="goHome()" title="Accueil">🏠</div>
             <div class="nav-key" onclick="scrollPlaylist(-1)" title="Haut">▲</div>
@@ -102,7 +102,7 @@
 
         let playlist = [];
         let currentIndex = -1;
-        let selectedIndex = 0; // Pour la navigation avec les flèches
+        let selectedIndex = 0;
         let audioCtx, analyser, sourceNode, isInitialized = false;
 
         function initAudioContext() {
@@ -167,14 +167,31 @@
         }
 
         function goHome() {
-            videoElement.pause();
+            // Si une vidéo est en lecture, on bascule automatiquement en mode Picture-in-Picture (PiP flottant)
+            if (!videoElement.paused && document.pictureInPictureEnabled) {
+                videoElement.requestPictureInPicture().catch(err => console.log(err));
+            } else {
+                videoElement.pause();
+            }
             playerView.style.display = 'none';
             mediaListView.style.display = 'none';
             homeMenu.style.display = 'grid';
             screenTitle.innerText = "Nokia N95 - Menu";
         }
 
-        // Sélection groupée de musiques et vidéos
+        // Activer / désactiver le mode PiP manuellement via le petit bouton "PiP"
+        async function togglePiP() {
+            try {
+                if (document.pictureInPictureElement) {
+                    await document.exitPictureInPicture();
+                } else if (document.pictureInPictureEnabled) {
+                    await videoElement.requestPictureInPicture();
+                }
+            } catch (error) {
+                console.log("Erreur PiP:", error);
+            }
+        }
+
         function addFiles(event) {
             const files = event.target.files;
             for (let file of files) {
@@ -186,7 +203,7 @@
             }
             renderPlaylist();
             if (currentIndex === -1 && playlist.length > 0) {
-                playMedia(0); // Lecture automatique du premier fichier importé
+                playMedia(0);
             }
         }
 
@@ -200,7 +217,7 @@
 
         function renderPlaylist() {
             if (playlist.length === 0) {
-                playlistContainer.innerHTML = `<div style="font-size: 9px; color: #777; text-align: center; margin-top: 20px;">Aucun média. Clique sur "Sélection Groupe" !</div>`;
+                playlistContainer.innerHTML = `<div style="font-size: 9px; color: #777; text-align: center; margin-top: 20px;">Aucun média. Sélectionne tes fichiers d'un coup !</div>`;
                 return;
             }
             playlistContainer.innerHTML = '';
@@ -236,7 +253,6 @@
             }
         }
 
-        // Lecture automatique du suivant
         function playNext() {
             if (playlist.length > 0) {
                 let nextIndex = (currentIndex + 1) % playlist.length;
@@ -251,7 +267,6 @@
             }
         }
 
-        // Navigation dans la liste avec les touches Haut/Bas
         function scrollPlaylist(direction) {
             if (mediaListView.style.display === 'flex' && playlist.length > 0) {
                 selectedIndex = (selectedIndex + direction + playlist.length) % playlist.length;
@@ -259,7 +274,6 @@
             }
         }
 
-        // Action de la touche OK du pavé
         function handleOKKey() {
             if (mediaListView.style.display === 'flex' && playlist.length > 0) {
                 playMedia(selectedIndex);
@@ -268,7 +282,6 @@
             }
         }
 
-        // Boutons de gauche
         document.getElementById('btn-play').addEventListener('click', () => {
             if (playerView.style.display === 'flex') {
                 if (videoElement.paused) videoElement.play();
@@ -287,7 +300,6 @@
             }
         });
 
-        // Service Worker PWA
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js').catch((err) => console.log('SW error:', err));
