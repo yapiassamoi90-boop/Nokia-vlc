@@ -45,7 +45,7 @@
                     </div>
                 </div>
 
-                <!-- Vue Liste des Médias (Bibliothèque) -->
+                <!-- Vue Liste des Médias (Bibliothèque avec Sélection de Groupe) -->
                 <div id="media-list-view" style="display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; background: #0b0f19; flex-direction: column; color: #fff; padding: 6px; z-index: 5;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; border-bottom: 1px solid #00f0ff33; padding-bottom: 3px;">
                         <span style="font-size: 10px; color: #00f0ff;">Bibliothèque</span>
@@ -54,7 +54,7 @@
                         </label>
                     </div>
                     <div id="playlist-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px;">
-                        <div style="font-size: 9px; color: #777; text-align: center; margin-top: 20px;">Clique sur "Sélection Groupe" pour importer plusieurs musiques ou vidéos !</div>
+                        <div style="font-size: 9px; color: #777; text-align: center; margin-top: 20px;">Clique sur "Sélection Groupe" pour importer toute ta playlist d'un coup !</div>
                     </div>
                 </div>
 
@@ -62,7 +62,7 @@
                 <div id="player-view" style="display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; background: #000; flex-direction: column; z-index: 10;">
                     <div style="position: relative; flex: 1; display: flex; justify-content: center; align-items: center; background: #000;">
                         <video id="video-element" controls autoplay onended="playNext()" style="width: 100%; height: 100%; object-fit: contain;"></video>
-                        <!-- Canvas de l'égaliseur visuel par-dessus ou pour les audios -->
+                        <!-- Canvas pour l'égaliseur audio -->
                         <canvas id="equalizer-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none;"></canvas>
                     </div>
                     <div style="background:#111; padding:4px; display:flex; justify-content:space-between; align-items:center;">
@@ -75,17 +75,17 @@
             </div>
         </div>
 
-        <!-- Pavé directionnel droit -->
+        <!-- Pavé directionnel droit interactif -->
         <div class="right-nokia-pad">
-            <div class="nav-key" onclick="goHome()">🏠</div>
-            <div class="nav-key">▲</div>
+            <div class="nav-key" onclick="goHome()" title="Accueil">🏠</div>
+            <div class="nav-key" onclick="scrollPlaylist(-1)" title="Haut">▲</div>
             <div style="display:flex; width:100%; justify-content:space-around;">
-                <div class="nav-key">◀</div>
-                <div class="nav-key" style="background:#00f0ff; color:#000;">OK</div>
-                <div class="nav-key">▶</div>
+                <div class="nav-key" onclick="playPrevious()" title="Précédent">◀</div>
+                <div class="nav-key" style="background:#00f0ff; color:#000;" onclick="handleOKKey()" title="OK">OK</div>
+                <div class="nav-key" onclick="playNext()" title="Suivant">▶</div>
             </div>
-            <div class="nav-key">▼</div>
-            <div class="nav-key" style="border-color: #ff3333; color: #ff3333; box-shadow: 0 0 8px rgba(255, 51, 51, 0.4);" onclick="goHome()">📞</div>
+            <div class="nav-key" onclick="scrollPlaylist(1)" title="Bas">▼</div>
+            <div class="nav-key" style="border-color: #ff3333; color: #ff3333; box-shadow: 0 0 8px rgba(255, 51, 51, 0.4);" onclick="goHome()" title="Quitter / Retour">📞</div>
         </div>
     </div>
 
@@ -102,6 +102,7 @@
 
         let playlist = [];
         let currentIndex = -1;
+        let selectedIndex = 0; // Pour la navigation avec les flèches
         let audioCtx, analyser, sourceNode, isInitialized = false;
 
         function initAudioContext() {
@@ -125,7 +126,6 @@
             requestAnimationFrame(drawEqualizer);
             if (!analyser || playerView.style.display !== 'flex') return;
 
-            // N'affiche le canvas graphique que si c'est un fichier audio (ou par choix visuel)
             canvas.width = canvas.offsetWidth;
             canvas.height = canvas.offsetHeight;
 
@@ -141,15 +141,12 @@
 
             for (let i = 0; i < bufferLength; i++) {
                 barHeight = (dataArray[i] / 255) * canvas.height;
-
-                // Couleur néon cyan style Nokia
                 let gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
                 gradient.addColorStop(0, '#0055ff');
                 gradient.addColorStop(1, '#00f0ff');
 
                 ctx.fillStyle = gradient;
                 ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-
                 x += barWidth + 2;
             }
         }
@@ -177,6 +174,7 @@
             screenTitle.innerText = "Nokia N95 - Menu";
         }
 
+        // Sélection groupée de musiques et vidéos
         function addFiles(event) {
             const files = event.target.files;
             for (let file of files) {
@@ -188,15 +186,14 @@
             }
             renderPlaylist();
             if (currentIndex === -1 && playlist.length > 0) {
-                playMedia(0);
+                playMedia(0); // Lecture automatique du premier fichier importé
             }
         }
 
         function loadSingleFile(event) {
             const file = event.target.files[0];
             if (file) {
-                const newItem = { name: file.name, url: URL.createObjectURL(file), type: file.type };
-                playlist.push(newItem);
+                playlist.push({ name: file.name, url: URL.createObjectURL(file), type: file.type });
                 playMedia(playlist.length - 1);
             }
         }
@@ -209,10 +206,11 @@
             playlistContainer.innerHTML = '';
             playlist.forEach((item, index) => {
                 let div = document.createElement('div');
-                div.style.cssText = `padding: 5px; background: ${index === currentIndex ? 'rgba(0, 240, 255, 0.2)' : 'rgba(255,255,255,0.05)'}; border: 1px solid ${index === currentIndex ? '#00f0ff' : 'rgba(0, 240, 255, 0.2)'}; border-radius: 4px; font-size: 9px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; color: #fff;`;
+                let isSelected = (index === selectedIndex && mediaListView.style.display === 'flex');
+                div.style.cssText = `padding: 5px; background: ${index === currentIndex ? 'rgba(0, 240, 255, 0.3)' : (isSelected ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)')}; border: 1px solid ${index === currentIndex || isSelected ? '#00f0ff' : 'rgba(0, 240, 255, 0.2)'}; border-radius: 4px; font-size: 9px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; color: #fff;`;
                 let icon = item.type.includes('audio') ? '🎵' : '🎬';
                 div.innerHTML = `<span>${icon} ${item.name}</span>`;
-                div.onclick = () => playMedia(index);
+                div.onclick = () => { selectedIndex = index; playMedia(index); };
                 playlistContainer.appendChild(div);
             });
         }
@@ -220,28 +218,25 @@
         function playMedia(index) {
             if (playlist.length > 0 && index >= 0 && index < playlist.length) {
                 currentIndex = index;
+                selectedIndex = index;
                 openPlayer();
                 
-                if (!isInitialized) {
-                    initAudioContext();
-                }
-                if (audioCtx && audioCtx.state === 'suspended') {
-                    audioCtx.resume();
-                }
+                if (!isInitialized) initAudioContext();
+                if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
 
                 videoElement.src = playlist[currentIndex].url;
                 videoElement.play();
                 nowPlaying.innerText = playlist[currentIndex].name;
 
-                // Afficher l'égaliseur visuel si c'est un fichier audio
                 if (playlist[currentIndex].type.includes('audio')) {
                     canvas.style.display = 'block';
                 } else {
-                    canvas.style.display = 'none'; // Laisse la vidéo s'afficher normalement
+                    canvas.style.display = 'none';
                 }
             }
         }
 
+        // Lecture automatique du suivant
         function playNext() {
             if (playlist.length > 0) {
                 let nextIndex = (currentIndex + 1) % playlist.length;
@@ -256,14 +251,28 @@
             }
         }
 
-        // Touches multimédias de gauche
+        // Navigation dans la liste avec les touches Haut/Bas
+        function scrollPlaylist(direction) {
+            if (mediaListView.style.display === 'flex' && playlist.length > 0) {
+                selectedIndex = (selectedIndex + direction + playlist.length) % playlist.length;
+                renderPlaylist();
+            }
+        }
+
+        // Action de la touche OK du pavé
+        function handleOKKey() {
+            if (mediaListView.style.display === 'flex' && playlist.length > 0) {
+                playMedia(selectedIndex);
+            } else {
+                openMediaList();
+            }
+        }
+
+        // Boutons de gauche
         document.getElementById('btn-play').addEventListener('click', () => {
             if (playerView.style.display === 'flex') {
-                if (videoElement.paused) {
-                    videoElement.play();
-                } else {
-                    videoElement.pause();
-                }
+                if (videoElement.paused) videoElement.play();
+                else videoElement.pause();
             } else if (playlist.length > 0) {
                 playMedia(currentIndex >= 0 ? currentIndex : 0);
             } else {
